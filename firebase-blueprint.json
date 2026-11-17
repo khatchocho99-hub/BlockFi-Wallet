@@ -1,0 +1,648 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered Gmail customer or administrator account with simulated demo balances and KYC status.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "username": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "accountId": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["customer", "admin"]
+        },
+        "kycStatus": {
+          "type": "string",
+          "enum": ["NOT_SUBMITTED", "PENDING", "APPROVED", "REJECTED"]
+        },
+        "availableBalance": {
+          "type": "number"
+        },
+        "tradingBalance": {
+          "type": "number"
+        },
+        "totalPnl": {
+          "type": "number"
+        },
+        "favoriteCoins": {
+          "type": "array"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "username",
+        "accountId",
+        "role",
+        "kycStatus",
+        "availableBalance",
+        "tradingBalance",
+        "totalPnl",
+        "favoriteCoins",
+        "settings",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized administrator registry document keyed by user UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "grantedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "grantedBy", "createdAt"]
+    },
+    "FuturesTrade": {
+      "title": "FuturesTrade",
+      "description": "Simulated binary/duration futures trade position with server-verified timestamps and settlement.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "coinId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "coinName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["LONG", "SHORT"]
+        },
+        "amount": {
+          "type": "number"
+        },
+        "profitRate": {
+          "type": "number"
+        },
+        "entryPrice": {
+          "type": "number"
+        },
+        "exitPrice": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "startedAtMs": {
+          "type": "number"
+        },
+        "lockAtMs": {
+          "type": "number"
+        },
+        "expiresAtMs": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "SETTLED"]
+        },
+        "result": {
+          "type": "string",
+          "enum": ["PENDING", "WIN", "LOSE"]
+        },
+        "payout": {
+          "type": "number"
+        },
+        "netPnl": {
+          "type": "number"
+        },
+        "settlementSignature": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "settledAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "userEmail",
+        "coinId",
+        "symbol",
+        "coinName",
+        "direction",
+        "amount",
+        "profitRate",
+        "entryPrice",
+        "exitPrice",
+        "durationSeconds",
+        "startedAtMs",
+        "lockAtMs",
+        "expiresAtMs",
+        "status",
+        "result",
+        "payout",
+        "netPnl",
+        "settlementSignature",
+        "createdAt"
+      ]
+    },
+    "AdminTradeConfig": {
+      "title": "AdminTradeConfig",
+      "description": "Protected admin-only outcome configuration for an active futures trade round.",
+      "type": "object",
+      "properties": {
+        "tradeId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "configuredOutcome": {
+          "type": "string",
+          "enum": ["AUTO", "WIN", "LOSE"]
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "configuredBy": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["tradeId", "configuredOutcome", "locked", "configuredBy", "updatedAt"]
+    },
+    "KycSubmission": {
+      "title": "KycSubmission",
+      "description": "Demo KYC identity verification submission using sample documents.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "documentType": {
+          "type": "string",
+          "enum": ["NATIONAL_ID", "DRIVERS_LICENSE", "PASSPORT"]
+        },
+        "documentNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64
+        },
+        "country": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "sampleDocName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REJECTED"]
+        },
+        "reviewNote": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "email",
+        "fullName",
+        "documentType",
+        "documentNumber",
+        "country",
+        "sampleDocName",
+        "status",
+        "reviewNote",
+        "reviewedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Simulated deposit, withdrawal, or admin balance adjustment ledger entry.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "type": {
+          "type": "string",
+          "enum": ["DEPOSIT", "WITHDRAWAL", "ADMIN_ADJUSTMENT"]
+        },
+        "asset": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "network": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "amount": {
+          "type": "number"
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "txReference": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REJECTED"]
+        },
+        "adminNote": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "email",
+        "type",
+        "asset",
+        "network",
+        "amount",
+        "address",
+        "txReference",
+        "status",
+        "adminNote",
+        "reviewedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WalletAddressConfig": {
+      "title": "WalletAddressConfig",
+      "description": "Admin-managed sample deposit address and QR code configuration per asset and network.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "asset": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "network": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "qrData": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "minDeposit": {
+          "type": "number"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "asset",
+        "name",
+        "network",
+        "address",
+        "qrData",
+        "minDeposit",
+        "isActive",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support conversation thread with Open, In Progress, or Resolved status.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Open", "In Progress", "Resolved"]
+        },
+        "lastMessagePreview": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "email",
+        "username",
+        "subject",
+        "category",
+        "status",
+        "lastMessagePreview",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Individual chat message inside a customer support ticket.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ticketId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["customer", "admin"]
+        },
+        "senderName": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ticketId", "senderUid", "senderRole", "senderName", "body", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable administrator action audit trail.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "adminUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "adminEmail": {
+          "type": "string",
+          "maxLength": 254
+        },
+        "action": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "targetUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "targetId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "adminUid", "adminEmail", "action", "targetUid", "targetId", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user account profiles, simulated balances, and preferences."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authorized administrator registry."
+    },
+    "/trades/{tradeId}": {
+      "schema": { "$ref": "#/entities/FuturesTrade" },
+      "description": "Simulated futures trades with active and settled history."
+    },
+    "/adminTradeConfigs/{tradeId}": {
+      "schema": { "$ref": "#/entities/AdminTradeConfig" },
+      "description": "Admin-only trade outcome configuration and lock state."
+    },
+    "/kycSubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/KycSubmission" },
+      "description": "Demo KYC document verification submissions."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "Simulated deposit, withdrawal, and admin adjustment ledger."
+    },
+    "/walletConfigs/{configId}": {
+      "schema": { "$ref": "#/entities/WalletAddressConfig" },
+      "description": "Sample crypto wallet addresses and QR configurations."
+    },
+    "/supportTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Customer support threads."
+    },
+    "/supportTickets/{ticketId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/SupportMessage" },
+      "description": "Messages belonging to a support ticket."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable admin audit log records."
+    }
+  }
+}

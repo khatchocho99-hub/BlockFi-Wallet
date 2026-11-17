@@ -1,0 +1,538 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedGmail() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.matches('^[^@]+@gmail\\.com$');
+    }
+
+    function isOwner(uid) {
+      return isVerifiedGmail() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isVerifiedGmail()
+        && request.auth.token.email == 'khatchocho99@gmail.com';
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+        'uid', 'email', 'username', 'photoURL', 'accountId', 'role', 'kycStatus',
+        'availableBalance', 'tradingBalance', 'totalPnl', 'favoriteCoins', 'settings',
+        'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'uid', 'email', 'username', 'photoURL', 'accountId', 'role', 'kycStatus',
+        'availableBalance', 'tradingBalance', 'totalPnl', 'favoriteCoins', 'settings',
+        'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.uid)
+      && data.email is string && data.email.size() >= 10 && data.email.size() <= 254 && data.email.matches('^[^@]+@gmail\\.com$')
+      && data.username is string && data.username.size() >= 2 && data.username.size() <= 60
+      && data.photoURL is string && data.photoURL.size() <= 500
+      && isValidId(data.accountId) && data.accountId.size() <= 32
+      && data.role in ['customer', 'admin']
+      && data.kycStatus in ['NOT_SUBMITTED', 'PENDING', 'APPROVED', 'REJECTED']
+      && data.availableBalance is number && data.availableBalance >= 0 && data.availableBalance <= 100000000
+      && data.tradingBalance is number && data.tradingBalance >= 0 && data.tradingBalance <= 100000000
+      && data.totalPnl is number && data.totalPnl >= -100000000 && data.totalPnl <= 100000000
+      && data.favoriteCoins is list && data.favoriteCoins.size() <= 30
+      && (data.favoriteCoins.size() == 0 || (data.favoriteCoins[0] is string && data.favoriteCoins[0].size() <= 64))
+      && data.settings is map
+      && data.settings.keys().hasOnly(['currency', 'compactMode', 'confirmTrades'])
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 10 && data.email.size() <= 254
+        && data.grantedBy is string && data.grantedBy.size() >= 1 && data.grantedBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFuturesTrade(data) {
+      return data.keys().hasAll([
+        'id', 'uid', 'userEmail', 'coinId', 'symbol', 'coinName', 'direction',
+        'amount', 'profitRate', 'entryPrice', 'exitPrice', 'durationSeconds',
+        'startedAtMs', 'lockAtMs', 'expiresAtMs', 'status', 'result',
+        'payout', 'netPnl', 'settlementSignature', 'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'uid', 'userEmail', 'coinId', 'symbol', 'coinName', 'direction',
+        'amount', 'profitRate', 'entryPrice', 'exitPrice', 'durationSeconds',
+        'startedAtMs', 'lockAtMs', 'expiresAtMs', 'status', 'result',
+        'payout', 'netPnl', 'settlementSignature', 'createdAt', 'settledAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.uid)
+      && data.userEmail is string && data.userEmail.size() >= 10 && data.userEmail.size() <= 254
+      && data.coinId is string && data.coinId.size() >= 1 && data.coinId.size() <= 64
+      && data.symbol is string && data.symbol.size() >= 1 && data.symbol.size() <= 16
+      && data.coinName is string && data.coinName.size() >= 1 && data.coinName.size() <= 64
+      && data.direction in ['LONG', 'SHORT']
+      && data.amount is number && data.amount >= 1 && data.amount <= 1000000
+      && data.profitRate is number && data.profitRate == 0.3
+      && data.entryPrice is number && data.entryPrice > 0
+      && data.exitPrice is number && data.exitPrice >= 0
+      && data.durationSeconds in [30, 60, 180, 300, 900, 3600, 21600, 43200, 86400]
+      && data.startedAtMs is number && data.startedAtMs > 0
+      && data.lockAtMs is number && data.lockAtMs >= data.startedAtMs
+      && data.expiresAtMs is number && data.expiresAtMs > data.startedAtMs
+      && data.status in ['ACTIVE', 'SETTLED']
+      && data.result in ['PENDING', 'WIN', 'LOSE']
+      && data.payout is number && data.payout >= 0 && data.payout <= data.amount * 1.301
+      && data.netPnl is number && data.netPnl >= -data.amount && data.netPnl <= data.amount * 0.301
+      && data.settlementSignature is string && data.settlementSignature.size() <= 256
+      && data.createdAt is timestamp
+      && (!data.keys().hasAny(['settledAt']) || data.settledAt is timestamp);
+    }
+
+    function isValidAdminTradeConfig(data) {
+      return data.keys().hasAll(['tradeId', 'configuredOutcome', 'locked', 'configuredBy', 'updatedAt'])
+        && data.keys().hasOnly(['tradeId', 'configuredOutcome', 'locked', 'configuredBy', 'updatedAt'])
+        && isValidId(data.tradeId)
+        && data.configuredOutcome in ['AUTO', 'WIN', 'LOSE']
+        && data.locked is bool
+        && data.configuredBy is string && data.configuredBy.size() >= 3 && data.configuredBy.size() <= 254
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidKycSubmission(data) {
+      return data.keys().hasAll([
+        'id', 'uid', 'email', 'fullName', 'documentType', 'documentNumber',
+        'country', 'sampleDocName', 'status', 'reviewNote', 'reviewedBy',
+        'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'uid', 'email', 'fullName', 'documentType', 'documentNumber',
+        'country', 'sampleDocName', 'status', 'reviewNote', 'reviewedBy',
+        'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.uid)
+      && data.email is string && data.email.size() >= 10 && data.email.size() <= 254
+      && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120
+      && data.documentType in ['NATIONAL_ID', 'DRIVERS_LICENSE', 'PASSPORT']
+      && data.documentNumber is string && data.documentNumber.size() >= 4 && data.documentNumber.size() <= 64
+      && data.country is string && data.country.size() >= 2 && data.country.size() <= 64
+      && data.sampleDocName is string && data.sampleDocName.size() >= 1 && data.sampleDocName.size() <= 120
+      && data.status in ['PENDING', 'APPROVED', 'REJECTED']
+      && data.reviewNote is string && data.reviewNote.size() <= 300
+      && data.reviewedBy is string && data.reviewedBy.size() <= 254
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidWalletTransaction(data) {
+      return data.keys().hasAll([
+        'id', 'uid', 'email', 'type', 'asset', 'network', 'amount',
+        'address', 'txReference', 'status', 'adminNote', 'reviewedBy',
+        'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'uid', 'email', 'type', 'asset', 'network', 'amount',
+        'address', 'txReference', 'status', 'adminNote', 'reviewedBy',
+        'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.uid)
+      && data.email is string && data.email.size() >= 10 && data.email.size() <= 254
+      && data.type in ['DEPOSIT', 'WITHDRAWAL', 'ADMIN_ADJUSTMENT']
+      && data.asset is string && data.asset.size() >= 2 && data.asset.size() <= 16
+      && data.network is string && data.network.size() >= 2 && data.network.size() <= 48
+      && data.amount is number && data.amount > 0 && data.amount <= 10000000
+      && data.address is string && data.address.size() <= 160
+      && data.txReference is string && data.txReference.size() <= 160
+      && data.status in ['PENDING', 'APPROVED', 'REJECTED']
+      && data.adminNote is string && data.adminNote.size() <= 300
+      && data.reviewedBy is string && data.reviewedBy.size() <= 254
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidWalletConfig(data) {
+      return data.keys().hasAll([
+        'id', 'asset', 'name', 'network', 'address', 'qrData',
+        'minDeposit', 'isActive', 'updatedBy', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'asset', 'name', 'network', 'address', 'qrData',
+        'minDeposit', 'isActive', 'updatedBy', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && data.asset is string && data.asset.size() >= 2 && data.asset.size() <= 16
+      && data.name is string && data.name.size() >= 2 && data.name.size() <= 48
+      && data.network is string && data.network.size() >= 2 && data.network.size() <= 48
+      && data.address is string && data.address.size() >= 8 && data.address.size() <= 160
+      && data.qrData is string && data.qrData.size() >= 8 && data.qrData.size() <= 300
+      && data.minDeposit is number && data.minDeposit >= 0
+      && data.isActive is bool
+      && data.updatedBy is string && data.updatedBy.size() <= 254
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll([
+        'id', 'uid', 'email', 'username', 'subject', 'category',
+        'status', 'lastMessagePreview', 'createdAt', 'updatedAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'uid', 'email', 'username', 'subject', 'category',
+        'status', 'lastMessagePreview', 'createdAt', 'updatedAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.uid)
+      && data.email is string && data.email.size() >= 10 && data.email.size() <= 254
+      && data.username is string && data.username.size() >= 2 && data.username.size() <= 60
+      && data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 140
+      && data.category is string && data.category.size() >= 2 && data.category.size() <= 48
+      && data.status in ['Open', 'In Progress', 'Resolved']
+      && data.lastMessagePreview is string && data.lastMessagePreview.size() <= 200
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp;
+    }
+
+    function isValidSupportMessage(data) {
+      return data.keys().hasAll([
+        'id', 'ticketId', 'senderUid', 'senderRole', 'senderName', 'body', 'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'ticketId', 'senderUid', 'senderRole', 'senderName', 'body', 'createdAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.ticketId)
+      && isValidId(data.senderUid)
+      && data.senderRole in ['customer', 'admin']
+      && data.senderName is string && data.senderName.size() >= 2 && data.senderName.size() <= 60
+      && data.body is string && data.body.size() >= 1 && data.body.size() <= 2000
+      && data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+        'id', 'adminUid', 'adminEmail', 'action', 'targetUid', 'targetId', 'details', 'createdAt'
+      ])
+      && data.keys().hasOnly([
+        'id', 'adminUid', 'adminEmail', 'action', 'targetUid', 'targetId', 'details', 'createdAt'
+      ])
+      && isValidId(data.id)
+      && isValidId(data.adminUid)
+      && data.adminEmail is string && data.adminEmail.size() >= 10 && data.adminEmail.size() <= 254
+      && data.action is string && data.action.size() >= 2 && data.action.size() <= 80
+      && data.targetUid is string && data.targetUid.size() <= 128
+      && data.targetId is string && data.targetId.size() <= 128
+      && data.details is string && data.details.size() >= 1 && data.details.size() <= 1000
+      && data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users (PII Protected)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().email == request.auth.token.email
+        && incoming().role == 'customer'
+        && incoming().kycStatus == 'NOT_SUBMITTED'
+        && incoming().availableBalance == 10000
+        && incoming().tradingBalance == 0
+        && incoming().totalPnl == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId) && isValidUserProfile(incoming()) && (
+        // Tier 1: Admin full operational updates (role immutable)
+        (isAdmin()
+          && incoming().uid == existing().uid
+          && incoming().email == existing().email
+          && incoming().accountId == existing().accountId
+          && incoming().role == existing().role
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+        )
+        ||
+        // Tier 2A: Owner profile / favorites / settings
+        (isOwner(userId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'favoriteCoins', 'settings', 'updatedAt'])
+          && incoming().updatedAt == request.time
+        )
+        ||
+        // Tier 2B: Owner KYC submission transition (NOT_SUBMITTED/REJECTED -> PENDING only)
+        (isOwner(userId)
+          && existing().kycStatus in ['NOT_SUBMITTED', 'REJECTED']
+          && incoming().kycStatus == 'PENDING'
+          && incoming().diff(existing()).affectedKeys().hasOnly(['kycStatus', 'updatedAt'])
+          && incoming().updatedAt == request.time
+        )
+        ||
+        // Tier 2C: Owner placing a futures trade (lock stake: available -> trading, total unchanged)
+        (isOwner(userId)
+          && existing().kycStatus == 'APPROVED'
+          && incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'tradingBalance', 'updatedAt'])
+          && incoming().availableBalance < existing().availableBalance
+          && incoming().tradingBalance > existing().tradingBalance
+          && (incoming().availableBalance + incoming().tradingBalance) == (existing().availableBalance + existing().tradingBalance)
+          && incoming().updatedAt == request.time
+        )
+        ||
+        // Tier 2D: Owner settling a futures trade (release trading stake + max 30% profit)
+        (isOwner(userId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'tradingBalance', 'totalPnl', 'updatedAt'])
+          && incoming().tradingBalance < existing().tradingBalance
+          && incoming().availableBalance >= existing().availableBalance
+          && incoming().availableBalance <= existing().availableBalance + ((existing().tradingBalance - incoming().tradingBalance) * 1.301)
+          && incoming().totalPnl <= existing().totalPnl + ((existing().tradingBalance - incoming().tradingBalance) * 0.301)
+          && incoming().updatedAt == request.time
+        )
+      );
+
+      allow delete: if false;
+    }
+
+    // 2. Admins Registry (Single-Owner Read-Only)
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // 3. Futures Trades
+    match /trades/{tradeId} {
+      allow get: if isValidId(tradeId) && (isAdmin() || (isVerifiedGmail() && existing().uid == request.auth.uid));
+      allow list: if isAdmin() || (isVerifiedGmail() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(tradeId)
+        && isVerifiedGmail()
+        && isValidFuturesTrade(incoming())
+        && incoming().id == tradeId
+        && incoming().uid == request.auth.uid
+        && incoming().userEmail == request.auth.token.email
+        && incoming().status == 'ACTIVE'
+        && incoming().result == 'PENDING'
+        && incoming().payout == 0
+        && incoming().netPnl == 0
+        && incoming().exitPrice == 0
+        && !incoming().keys().hasAny(['settledAt'])
+        && incoming().createdAt == request.time
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.kycStatus == 'APPROVED';
+
+      allow update: if isValidId(tradeId) && isValidFuturesTrade(incoming()) && (
+        isAdmin()
+        ||
+        (isVerifiedGmail()
+          && existing().uid == request.auth.uid
+          && existing().status == 'ACTIVE'
+          && incoming().status == 'SETTLED'
+          && incoming().result in ['WIN', 'LOSE']
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'result', 'exitPrice', 'payout', 'netPnl', 'settlementSignature', 'settledAt'])
+          && incoming().settledAt == request.time
+        )
+      );
+
+      allow delete: if false;
+    }
+
+    // 4. Admin Trade Outcome Configs (Strictly Admin Only - Hidden from Customers)
+    match /adminTradeConfigs/{tradeId} {
+      allow get: if isValidId(tradeId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(tradeId)
+        && isAdmin()
+        && isValidAdminTradeConfig(incoming())
+        && incoming().tradeId == tradeId
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(tradeId)
+        && isAdmin()
+        && isValidAdminTradeConfig(incoming())
+        && existing().locked == false
+        && incoming().tradeId == existing().tradeId
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 5. KYC Submissions
+    match /kycSubmissions/{submissionId} {
+      allow get: if isValidId(submissionId) && (isAdmin() || (isVerifiedGmail() && existing().uid == request.auth.uid));
+      allow list: if isAdmin() || (isVerifiedGmail() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(submissionId)
+        && isVerifiedGmail()
+        && isValidKycSubmission(incoming())
+        && incoming().id == submissionId
+        && incoming().uid == request.auth.uid
+        && incoming().email == request.auth.token.email
+        && incoming().status == 'PENDING'
+        && incoming().reviewNote == ''
+        && incoming().reviewedBy == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
+      allow update: if isValidId(submissionId)
+        && isAdmin()
+        && isValidKycSubmission(incoming())
+        && incoming().id == existing().id
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // 6. Wallet Transactions
+    match /transactions/{txId} {
+      allow get: if isValidId(txId) && (isAdmin() || (isVerifiedGmail() && existing().uid == request.auth.uid));
+      allow list: if isAdmin() || (isVerifiedGmail() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(txId)
+        && isVerifiedGmail()
+        && isValidWalletTransaction(incoming())
+        && incoming().id == txId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().uid == request.auth.uid
+            && incoming().email == request.auth.token.email
+            && incoming().type in ['DEPOSIT', 'WITHDRAWAL']
+            && incoming().status == 'PENDING'
+            && incoming().adminNote == ''
+            && incoming().reviewedBy == ''
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
+
+      allow update: if isValidId(txId)
+        && isAdmin()
+        && isValidWalletTransaction(incoming())
+        && existing().status == 'PENDING'
+        && incoming().id == existing().id
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    // 7. Wallet Address & QR Configurations
+    match /walletConfigs/{configId} {
+      allow get: if isValidId(configId) && isVerifiedGmail();
+      allow list: if isVerifiedGmail();
+      allow create, update: if isValidId(configId)
+        && isAdmin()
+        && isValidWalletConfig(incoming())
+        && incoming().id == configId
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 8. Customer Support Tickets & Messages
+    match /supportTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (isAdmin() || (isVerifiedGmail() && existing().uid == request.auth.uid));
+      allow list: if isAdmin() || (isVerifiedGmail() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(ticketId)
+        && isVerifiedGmail()
+        && isValidSupportTicket(incoming())
+        && incoming().id == ticketId
+        && incoming().uid == request.auth.uid
+        && incoming().email == request.auth.token.email
+        && incoming().status == 'Open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(ticketId) && isValidSupportTicket(incoming()) && (
+        (isAdmin()
+          && incoming().id == existing().id
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+        )
+        ||
+        (isVerifiedGmail()
+          && existing().uid == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly(['lastMessagePreview', 'updatedAt'])
+          && incoming().updatedAt == request.time
+        )
+      );
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow get: if isValidId(ticketId) && isValidId(messageId) && (
+          isAdmin()
+          || (isVerifiedGmail() && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.uid == request.auth.uid)
+        );
+        allow list: if isValidId(ticketId) && (
+          isAdmin()
+          || (isVerifiedGmail() && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.uid == request.auth.uid)
+        );
+
+        allow create: if isValidId(ticketId) && isValidId(messageId)
+          && isVerifiedGmail()
+          && isValidSupportMessage(incoming())
+          && incoming().id == messageId
+          && incoming().ticketId == ticketId
+          && incoming().senderUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && (
+            (isAdmin() && incoming().senderRole == 'admin')
+            || (
+              incoming().senderRole == 'customer'
+              && get(/databases/$(database)/documents/supportTickets/$(ticketId)).data.uid == request.auth.uid
+            )
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    // 9. Immutable Admin Audit Logs
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId)
+        && isAdmin()
+        && isValidAuditLog(incoming())
+        && incoming().id == logId
+        && incoming().adminUid == request.auth.uid
+        && incoming().adminEmail == request.auth.token.email
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
